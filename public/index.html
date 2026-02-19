@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EOG Revenue Check Parser</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+    h1 {
+      color: #1a202c;
+      font-size: 24px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .subtitle {
+      color: #718096;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .upload-zone {
+      border: 2px dashed #cbd5e0;
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: #f7fafc;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: #667eea;
+      background: #ebf4ff;
+    }
+    .upload-zone input { display: none; }
+    .upload-icon { font-size: 48px; margin-bottom: 16px; }
+    .upload-text { color: #4a5568; margin-bottom: 8px; }
+    .upload-hint { color: #a0aec0; font-size: 12px; }
+    .file-selected {
+      background: #e6fffa;
+      border-color: #38b2ac;
+      padding: 20px;
+    }
+    .file-selected .file-name {
+      color: #234e52;
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: all 0.3s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-primary:disabled {
+      background: #cbd5e0;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-success {
+      background: #48bb78;
+      color: white;
+    }
+    .status {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 8px;
+      display: none;
+    }
+    .status.loading {
+      display: block;
+      background: #fefcbf;
+      border: 1px solid #ecc94b;
+      color: #744210;
+    }
+    .status.success {
+      display: block;
+      background: #c6f6d5;
+      border: 1px solid #48bb78;
+      color: #22543d;
+    }
+    .status.error {
+      display: block;
+      background: #fed7d7;
+      border: 1px solid #fc8181;
+      color: #742a2a;
+    }
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #ecc94b;
+      border-top-color: #744210;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .footer {
+      margin-top: 30px;
+      text-align: center;
+      color: #a0aec0;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 EOG Revenue Check Parser</h1>
+    <p class="subtitle">Upload an EOG Resources revenue check PDF to extract data as CSV</p>
+    
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept=".pdf,application/pdf">
+      <div class="upload-icon">📄</div>
+      <div class="upload-text"><strong>Click to upload</strong> or drag and drop</div>
+      <div class="upload-hint">PDF files up to 50MB</div>
+    </div>
+    
+    <button class="btn btn-primary" id="parseBtn" disabled>Parse PDF</button>
+    
+    <div class="status" id="status"></div>
+    
+    <div class="footer">
+      Powered by OpenClaw + Claude Vision
+    </div>
+  </div>
+
+  <script>
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const parseBtn = document.getElementById('parseBtn');
+    const status = document.getElementById('status');
+    let selectedFile = null;
+
+    uploadZone.addEventListener('click', () => fileInput.click());
+    
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+    
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+    
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      if (e.dataTransfer.files[0]?.type === 'application/pdf') {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+    
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+    
+    function handleFile(file) {
+      selectedFile = file;
+      uploadZone.classList.add('file-selected');
+      uploadZone.innerHTML = `
+        <div class="upload-icon">✅</div>
+        <div class="file-name">${file.name}</div>
+        <div class="upload-hint">${(file.size / 1024 / 1024).toFixed(2)} MB</div>
+      `;
+      parseBtn.disabled = false;
+    }
+    
+    parseBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      
+      parseBtn.disabled = true;
+      parseBtn.textContent = 'Processing...';
+      status.className = 'status loading';
+      status.innerHTML = '<span class="spinner"></span> Parsing PDF... This may take 2-5 minutes for large documents.';
+      
+      const formData = new FormData();
+      formData.append('pdf', selectedFile);
+      
+      try {
+        const response = await fetch('/api/parse', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+          status.className = 'status success';
+          if (result.downloadUrl) {
+            status.innerHTML = `✅ Parsing complete!<br><br>
+              <a href="${result.downloadUrl}" class="btn btn-success" style="display:inline-block;text-decoration:none;padding:10px 20px;margin-top:10px;">
+                ⬇️ Download CSV
+              </a>`;
+          } else {
+            status.innerHTML = `✅ ${result.message}`;
+          }
+        } else {
+          throw new Error(result.error || 'Processing failed');
+        }
+      } catch (error) {
+        status.className = 'status error';
+        status.innerHTML = `❌ Error: ${error.message}`;
+      }
+      
+      parseBtn.disabled = false;
+      parseBtn.textContent = 'Parse PDF';
+    });
+  </script>
+</body>
+</html>
